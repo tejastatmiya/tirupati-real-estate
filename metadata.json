@@ -1,0 +1,6 @@
+{
+  "name": "Tirupati Real Estate - Junagadh Property Advisory",
+  "description": "Discover curated homes, residential plots, commercial spaces, and rental properties in Junagadh with Tirupati Real Estate. Trusted local guidance and site visits.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
