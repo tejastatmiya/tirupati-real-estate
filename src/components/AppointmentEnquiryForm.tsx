@@ -1,33 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Calendar,
-  Clock,
   User,
   Phone,
   Mail,
-  MapPin,
   Building2,
   Wallet,
-  FileText,
   CheckCircle2,
-  AlertCircle,
   ArrowRight,
   ArrowLeft,
   MessageCircle,
   Home,
   Check,
   RotateCcw,
-  Sparkles,
 } from 'lucide-react';
 import { BUSINESS_INFO } from '../data/config';
 
 export type AppointmentType = 'PROPERTY_VISIT' | 'MEETING_CONSULTATION';
 export type RequirementType = 'BUY' | 'RENT' | 'SELL' | 'INVESTMENT' | 'PROPERTY_CONSULTATION';
-
-interface SlotInfo {
-  time: string;
-  status: 'available' | 'booked';
-}
 
 interface AppointmentEnquiryFormProps {
   initialProperty?: {
@@ -88,79 +78,16 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
     customNotes: activeTitle
       ? `Property Gami Chhe / Interested in this Property: [${activePropertyId || 'Ref'}] ${activeTitle}${initialProperty?.price ? ` (Price: ${initialProperty.price})` : ''}`
       : '',
-    // Appointment scheduling
+    // Appointment preference (no date/time - handled directly via WhatsApp)
     appointmentType: initialAppointmentType,
-    date: '',
-    time: '',
   });
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Dynamic slots state
-  const [slots, setSlots] = useState<SlotInfo[]>([]);
-  const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
-  const [slotsError, setSlotsError] = useState<string | null>(null);
-
   // Submission state
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submittedAppointment, setSubmittedAppointment] = useState<any | null>(null);
-  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [whatsAppUrl, setWhatsAppUrl] = useState<string>('');
-
-  // Default to tomorrow's date for appointment
-  useEffect(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    // If tomorrow is Sunday, skip to Monday
-    if (tomorrow.getDay() === 0) {
-      tomorrow.setDate(tomorrow.getDate() + 1);
-    }
-    const dateStr = tomorrow.toISOString().split('T')[0];
-    setFormData((prev) => ({ ...prev, date: dateStr }));
-  }, []);
-
-  // Fetch slot availability whenever selected date changes
-  useEffect(() => {
-    if (!formData.date) return;
-
-    let isMounted = true;
-    setLoadingSlots(true);
-    setSlotsError(null);
-
-    fetch(`/api/availability?date=${formData.date}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted) return;
-        setLoadingSlots(false);
-        if (data.success && data.data) {
-          if (!data.data.isAvailableDay) {
-            setSlotsError(data.data.reason || 'This date is not available.');
-            setSlots([]);
-          } else {
-            setSlots(data.data.slots || []);
-            // If current selected time is already booked on this date, reset it
-            const matchedSlot = (data.data.slots || []).find(
-              (s: SlotInfo) => s.time === formData.time
-            );
-            if (matchedSlot && matchedSlot.status === 'booked') {
-              setFormData((prev) => ({ ...prev, time: '' }));
-            }
-          }
-        } else {
-          setSlotsError(data.error || 'Failed to load time slots.');
-        }
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setLoadingSlots(false);
-        setSlotsError('Unable to load real-time slot availability. Please try again.');
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [formData.date]);
 
   // Validation functions
   const validateStep = (step: number): boolean => {
@@ -189,15 +116,6 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
       }
     }
 
-    if (step === 6) {
-      if (!formData.date) {
-        newErrors.date = 'Please select an appointment date.';
-      }
-      if (!formData.time) {
-        newErrors.time = 'Please select an available time slot.';
-      }
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -212,83 +130,48 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateStep(6)) return;
 
-    setIsSubmitting(true);
-    setSubmissionError(null);
+    const lines = [
+      `*New Enquiry - TIRUPATI REAL ESTATE*`,
+      ``,
+      `*Name:* ${formData.fullName}`,
+      `*Phone:* ${formData.phone}`,
+      formData.email ? `*Email:* ${formData.email}` : '',
+      `*Preferred Contact:* ${formData.preferredContactMethod}`,
+      `*Appointment Type:* ${formData.appointmentType === 'PROPERTY_VISIT' ? 'Property Visit' : 'Meeting / Consultation'}`,
+      `*Looking For:* ${formData.requirementType}`,
+      `*Property Type:* ${formData.propertyType}`,
+      formData.propertyName ? `*Property of Interest:* ${formData.propertyName}` : '',
+      `*Budget:* ${formData.customBudget || formData.budget}`,
+      `*Preferred Location:* ${
+        formData.specificLocationNotes
+          ? `${formData.preferredLocation} (${formData.specificLocationNotes})`
+          : formData.preferredLocation
+      }`,
+      formData.requirementType === 'BUY' ? `*Bedrooms:* ${formData.bedrooms}` : '',
+      formData.plotSize ? `*Plot Size:* ${formData.plotSize}` : '',
+      formData.customNotes ? `*Notes:* ${formData.customNotes}` : '',
+    ].filter(Boolean).join('\n');
 
-    try {
-      const response = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: formData.fullName,
-          phone: formData.phone,
-          email: formData.email,
-          preferredContactMethod: formData.preferredContactMethod,
-          appointmentType: formData.appointmentType,
-          requirementType: formData.requirementType,
-          propertyType: formData.propertyType,
-          budget: formData.budget,
-          customBudget: formData.customBudget,
-          preferredLocation: formData.specificLocationNotes
-            ? `${formData.preferredLocation} (${formData.specificLocationNotes})`
-            : formData.preferredLocation,
-          specificRequirements:
-            formData.requirementType === 'BUY'
-              ? `Bedrooms: ${formData.bedrooms}`
-              : formData.requirementType === 'RENT'
-              ? `Rental Budget: ${formData.monthlyRentalBudget}`
-              : formData.plotSize
-              ? `Plot Size: ${formData.plotSize}`
-              : undefined,
-          customNotes: formData.customNotes,
-          propertyId: formData.propertyId,
-          propertyName: formData.propertyName,
-          interestedInProperty: formData.interestedInProperty,
-          bedrooms: formData.bedrooms,
-          plotSize: formData.plotSize,
-          commercialType: formData.commercialType,
-          date: formData.date,
-          time: formData.time,
-        }),
-      });
+    const encodedMessage = encodeURIComponent(lines);
+    const waUrl = `https://wa.me/${BUSINESS_INFO.phoneRaw}?text=${encodedMessage}`;
 
-      const result = await response.json();
+    setWhatsAppUrl(waUrl);
+    setSubmittedAppointment({
+      fullName: formData.fullName,
+      appointmentType: formData.appointmentType,
+      requirementType: formData.requirementType,
+      propertyType: formData.propertyType,
+      budget: formData.customBudget || formData.budget,
+      preferredLocation: formData.preferredLocation,
+      customNotes: formData.customNotes,
+    });
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to submit appointment request.');
-      }
+    window.open(waUrl, '_blank');
 
-      setSubmittedAppointment(result.data);
-      if (result.whatsAppShareUrl) {
-        setWhatsAppUrl(result.whatsAppShareUrl);
-      }
-      if (onSuccess) onSuccess();
-    } catch (err: any) {
-      console.error('Submission failed:', err);
-      setSubmissionError(err.message || 'An error occurred. Please try again.');
-      // Refresh slot availability in case of slot conflict
-      if (err.message && err.message.includes('booked')) {
-        fetch(`/api/availability?date=${formData.date}`)
-          .then((res) => res.json())
-          .then((d) => {
-            if (d.success && d.data) {
-              setSlots(d.data.slots || []);
-              setFormData((prev) => ({ ...prev, time: '' }));
-            }
-          });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const getMinDate = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+    if (onSuccess) onSuccess();
   };
 
   // ----------------------------------------------------
@@ -302,31 +185,20 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
           <div className="w-16 h-16 rounded-full bg-[#B89A5A]/20 border border-[#B89A5A] text-[#8D713C] flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8" />
           </div>
-          <span className="inline-block px-3 py-1 rounded-full bg-[#F4F1EA] border border-[#DDD8CC] text-[11px] uppercase tracking-[0.2em] font-bold text-[#8D713C]">
-            Reference: {submittedAppointment.id}
-          </span>
           <h3 className="font-editorial text-3xl sm:text-4xl font-light text-[#11110F]">
-            Appointment Request Received
+            Enquiry Sent
           </h3>
           <p className="text-xs sm:text-sm text-[#6D6A63] max-w-md mx-auto leading-relaxed">
-            Thank you, <strong className="text-[#11110F]">{submittedAppointment.fullName}</strong>. Our senior property advisor will contact you to confirm your {isVisit ? 'property site visit' : 'office consultation'}.
+            Thank you, <strong className="text-[#11110F]">{submittedAppointment.fullName}</strong>. Please tap the button below to send your enquiry to us on WhatsApp so our senior property advisor can confirm a convenient date and time for your {isVisit ? 'property site visit' : 'office consultation'}.
           </p>
         </div>
 
-        {/* Detailed Booking Summary */}
+        {/* Summary */}
         <div className="bg-[#F4F1EA] border border-[#DDD8CC] rounded-xl p-5 sm:p-6 mb-8 text-xs sm:text-sm space-y-3">
           <div className="flex items-center justify-between border-b border-[#DDD8CC]/70 pb-2.5">
             <span className="text-[#6D6A63]">Appointment Type:</span>
             <span className="font-semibold text-[#11110F]">
               {isVisit ? 'Property Visit' : 'Meeting / Consultation'}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between border-b border-[#DDD8CC]/70 pb-2.5">
-            <span className="text-[#6D6A63]">Scheduled Date & Time:</span>
-            <span className="font-semibold text-[#8D713C] flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" />
-              {submittedAppointment.date} at {submittedAppointment.time}
             </span>
           </div>
 
@@ -354,7 +226,7 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
           <div className="pt-1">
             <span className="text-[#6D6A63] block mb-1">Your Requirements / Notes:</span>
             <p className="bg-[#FAF9F6] p-3 rounded-lg border border-[#DDD8CC] text-[#171717] italic text-xs">
-              “{submittedAppointment.customNotes || 'Looking forward to meeting and discussing suitable options.'}”
+              "{submittedAppointment.customNotes || 'Looking forward to discussing suitable options.'}"
             </p>
           </div>
         </div>
@@ -362,14 +234,14 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
         {/* Confirmation Action Buttons */}
         <div className="space-y-3">
           {whatsAppUrl && (
-            <a
+            
               href={whatsAppUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-md bg-[#25D366] text-black text-xs font-bold uppercase tracking-wider hover:bg-[#20bd5a] transition-all shadow-md"
             >
               <MessageCircle className="w-4 h-4" />
-              <span>Send Confirmation on WhatsApp</span>
+              <span>Send Enquiry on WhatsApp</span>
             </a>
           )}
 
@@ -380,13 +252,13 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
             }}
             className="w-full inline-flex items-center justify-center gap-2 py-3 px-6 rounded-md bg-[#11110F] text-[#FAF9F6] text-xs font-semibold uppercase tracking-wider hover:bg-[#B89A5A] hover:text-[#11110F] transition-all cursor-pointer"
           >
-            <span>Book Another Appointment</span>
+            <span>Send Another Enquiry</span>
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
         </div>
 
         <p className="text-[11px] text-[#6D6A63] text-center mt-6">
-          Office Location: New Collector Office Back, Junagadh • Helpline: +91 63565 48117
+          Office Location: New Collector Office Back, Junagadh • Helpline: {BUSINESS_INFO.phone}
         </p>
       </div>
     );
@@ -423,16 +295,6 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
           ))}
         </div>
       </div>
-
-      {submissionError && (
-        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm flex items-start gap-2.5">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold">Unable to complete booking</p>
-            <p className="mt-0.5">{submissionError}</p>
-          </div>
-        </div>
-      )}
 
       {/* ----------------------------------------------------
           STEP 1: CONTACT DETAILS
@@ -559,31 +421,11 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {[
-              {
-                id: 'BUY',
-                title: 'BUY A PROPERTY',
-                desc: 'Looking to purchase a home, plot, bungalow, or land.',
-              },
-              {
-                id: 'RENT',
-                title: 'RENT A PROPERTY',
-                desc: 'Searching for a family residence or commercial lease.',
-              },
-              {
-                id: 'SELL',
-                title: 'SELL MY PROPERTY',
-                desc: 'Connect with qualified buyers for houses, plots, or commercial.',
-              },
-              {
-                id: 'INVESTMENT',
-                title: 'PROPERTY INVESTMENT',
-                desc: 'Strategic high-growth land corridors and commercial assets.',
-              },
-              {
-                id: 'PROPERTY_CONSULTATION',
-                title: 'PROPERTY CONSULTATION',
-                desc: 'Title verification, revenue maps, valuation, and general advice.',
-              },
+              { id: 'BUY', title: 'BUY A PROPERTY', desc: 'Looking to purchase a home, plot, bungalow, or land.' },
+              { id: 'RENT', title: 'RENT A PROPERTY', desc: 'Searching for a family residence or commercial lease.' },
+              { id: 'SELL', title: 'SELL MY PROPERTY', desc: 'Connect with qualified buyers for houses, plots, or commercial.' },
+              { id: 'INVESTMENT', title: 'PROPERTY INVESTMENT', desc: 'Strategic high-growth land corridors and commercial assets.' },
+              { id: 'PROPERTY_CONSULTATION', title: 'PROPERTY CONSULTATION', desc: 'Title verification, revenue maps, valuation, and general advice.' },
             ].map((item) => {
               const isSelected = formData.requirementType === item.id;
               return (
@@ -711,7 +553,6 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
             })}
           </div>
 
-          {/* Optional Custom Budget Input */}
           <div className="pt-2">
             <label className="block text-[11px] uppercase tracking-wider font-semibold text-[#11110F] mb-1.5">
               Specific or Custom Budget Notes (Optional)
@@ -741,7 +582,6 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
             </p>
           </div>
 
-          {/* Quick Location Pills */}
           <div>
             <label className="block text-[11px] uppercase tracking-wider font-semibold text-[#11110F] mb-2">
               Preferred Junagadh Locality
@@ -782,7 +622,6 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
             />
           </div>
 
-          {/* Dynamic Requirements Based on Type */}
           {(formData.propertyType.includes('House') || formData.propertyType.includes('Apartment')) && (
             <div>
               <label className="block text-[11px] uppercase tracking-wider font-semibold text-[#11110F] mb-2">
@@ -822,7 +661,6 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
             </div>
           )}
 
-          {/* Large Notes Textarea - CRITICAL requirement */}
           <div>
             <label className="block text-[11px] uppercase tracking-wider font-semibold text-[#11110F] mb-1.5">
               Tell us what you are looking for (Specific Requirements / Notes)
@@ -839,24 +677,20 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
       )}
 
       {/* ----------------------------------------------------
-          STEP 6: APPOINTMENT TYPE & REAL-TIME SLOT SCHEDULING
+          STEP 6: HOW WOULD YOU LIKE TO CONNECT + SEND VIA WHATSAPP
       ---------------------------------------------------- */}
       {currentStep === 6 && (
         <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-200">
           <div>
             <h3 className="font-editorial text-2xl sm:text-3xl font-light text-[#11110F]">
-              Select Appointment & Time Slot
+              How Would You Like to Connect?
             </h3>
             <p className="text-xs sm:text-sm text-[#6D6A63] mt-1">
-              Choose whether you prefer an accompanied property visit or an office consultation, and select an available time.
+              Choose whether you prefer an accompanied property visit or an office consultation. Our team will contact you on WhatsApp shortly to fix a convenient date and time.
             </p>
           </div>
 
-          {/* Appointment Type Selector */}
           <div>
-            <label className="block text-[11px] uppercase tracking-wider font-semibold text-[#11110F] mb-2">
-              How would you like to connect?
-            </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div
                 onClick={() => setFormData({ ...formData, appointmentType: 'PROPERTY_VISIT' })}
@@ -894,99 +728,21 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
             </div>
           </div>
 
-          {/* Date Picker */}
-          <div>
-            <label className="block text-[11px] uppercase tracking-wider font-semibold text-[#11110F] mb-1.5">
-              Select Appointment Date <span className="text-[#8D713C]">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type="date"
-                min={getMinDate()}
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full bg-[#F4F1EA] text-[#11110F] text-xs sm:text-sm py-3 px-3.5 rounded-lg border border-[#DDD8CC] focus:outline-none focus:border-[#B89A5A]"
-              />
-            </div>
-            {errors.date && <p className="text-[11px] text-red-500 mt-1">{errors.date}</p>}
+          <div className="p-4 rounded-xl bg-[#F4F1EA] border border-[#DDD8CC] flex items-start gap-2.5">
+            <Calendar className="w-4 h-4 text-[#8D713C] mt-0.5 shrink-0" />
+            <p className="text-xs text-[#6D6A63]">
+              No need to pick a date/time here — tap the button below and your enquiry details will open directly in WhatsApp. Our team will confirm the best date & time with you personally.
+            </p>
           </div>
 
-          {/* Real-time Dynamic Time Slots */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-[11px] uppercase tracking-wider font-semibold text-[#11110F] flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#8D713C]" />
-                Select Available Time Slot <span className="text-[#8D713C]">*</span>
-              </label>
-              {loadingSlots && (
-                <span className="text-[10px] text-[#8D713C] animate-pulse">
-                  Checking real-time slots...
-                </span>
-              )}
-            </div>
-
-            {slotsError ? (
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs text-center">
-                <p className="font-semibold mb-1">{slotsError}</p>
-                <p className="text-[11px]">Please select another upcoming date from Monday to Saturday.</p>
-              </div>
-            ) : slots.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {slots.map((slot) => {
-                  const isBooked = slot.status === 'booked';
-                  const isSelected = formData.time === slot.time;
-
-                  return (
-                    <button
-                      type="button"
-                      key={slot.time}
-                      disabled={isBooked}
-                      onClick={() => setFormData({ ...formData, time: slot.time })}
-                      className={`py-2.5 px-2 rounded-lg text-xs font-semibold tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center border ${
-                        isBooked
-                          ? 'bg-[#DDD8CC]/30 text-[#6D6A63]/50 border-dashed border-[#DDD8CC] cursor-not-allowed'
-                          : isSelected
-                          ? 'bg-[#11110F] text-white border-[#11110F] shadow-sm'
-                          : 'bg-[#F4F1EA] text-[#11110F] border-[#DDD8CC] hover:border-[#B89A5A]'
-                      }`}
-                    >
-                      <span>{slot.time}</span>
-                      <span className={`text-[9px] mt-0.5 font-normal ${
-                        isBooked ? 'text-red-500 font-medium' : isSelected ? 'text-[#B89A5A]' : 'text-emerald-700'
-                      }`}>
-                        {isBooked ? 'Booked' : 'Available'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="p-4 rounded-xl bg-[#F4F1EA] text-center text-xs text-[#6D6A63]">
-                No appointments available on this date. Please select another date.
-              </div>
-            )}
-            {errors.time && <p className="text-[11px] text-red-500 mt-1">{errors.time}</p>}
-          </div>
-
-          {/* Submit CTA */}
           <div className="pt-2">
             <button
               type="submit"
-              disabled={isSubmitting || !!slotsError || !formData.time}
-              className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-md bg-[#11110F] text-[#FAF9F6] text-xs font-semibold uppercase tracking-wider hover:bg-[#B89A5A] hover:text-[#11110F] transition-all cursor-pointer shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-md bg-[#25D366] text-black text-xs font-bold uppercase tracking-wider hover:bg-[#20bd5a] transition-all cursor-pointer shadow-lg"
             >
-              {isSubmitting ? (
-                <span>Submitting & Reserving Slot...</span>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Reserve Slot & Request Appointment</span>
-                </>
-              )}
+              <MessageCircle className="w-4 h-4" />
+              <span>Send Enquiry on WhatsApp</span>
             </button>
-            <p className="text-[10px] text-[#6D6A63] text-center mt-2">
-              Slot will be atomically reserved in real-time. Admin notified via Email & WhatsApp.
-            </p>
           </div>
         </form>
       )}
