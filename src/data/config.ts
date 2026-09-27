@@ -42,13 +42,13 @@ export const BUSINESS_INFO = {
 
 // Generated high-quality architectural image paths
 export const IMAGES = {
-  hero: "/src/assets/images/hero_property_1790431765573.jpg",
-  villa: "/src/assets/images/prop_villa_bungalow_1790431782459.jpg",
-  plot: "/src/assets/images/prop_res_plot_1790431799999.jpg",
-  apartment: "/src/assets/images/prop_luxury_apt_1790431813783.jpg",
-  commercial: "/src/assets/images/prop_commercial_junagadh_1790431983806.jpg",
-  interiorRental: "/src/assets/images/prop_interior_rental_1790431997391.jpg",
-  officeConsultation: "/src/assets/images/about_consult_office_1790431965661.jpg",
+hero: "/assets/images/hero_property_1790431765573.jpg",
+ villa: "/assets/images/prop_villa_bungalow_1790431782459.jpg",
+ plot: "/assets/images/prop_res_plot_1790431799999.jpg",
+apartment: "/assets/images/prop_luxury_apt_1790431813783.jpg",
+commercial: "/assets/images/prop_commercial_junagadh_1790431983806.jpg",
+interiorRental: "/assets/images/prop_interior_rental_1790431997391.jpg",
+  officeConsultation: "/assets/images/about_consult_office_1790431965661.jpg",
 };
 
 export const PROPERTIES: Property[] = [
