@@ -234,7 +234,7 @@ export const AppointmentEnquiryForm: React.FC<AppointmentEnquiryFormProps> = ({
         {/* Confirmation Action Buttons */}
         <div className="space-y-3">
           {whatsAppUrl && (
-            
+             '<a'
               href={whatsAppUrl}
               target="_blank"
               rel="noopener noreferrer"
